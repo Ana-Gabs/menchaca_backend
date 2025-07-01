@@ -1,0 +1,31 @@
+# Archivos binarios
+*.exe
+*.out
+*.test
+
+# Archivos de construcción
+/build/
+bin/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos temporales y caché
+*.log
+*.tmp
+*.swp
+
+# Archivos de entorno
+.env
+
+# Módulos de dependencias (si usas vendoring)
+vendor/
+
+# Archivos específicos de Go
+go.sum
+
+# IDEs y editores
+.vscode/
+.idea/
+*.code-workspace
