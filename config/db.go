@@ -34,5 +34,5 @@ func InitDB() {
 	}
 
 	DB = conn
-	fmt.Println("Conexión exitosa con la base de datos")
+	fmt.Println("Conexión exitosa con la base de datos en SUPABASE")
 }
