@@ -30,7 +30,7 @@ func InitDB() {
 
 	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
-		log.Fatalf("Error al etablecer conexión con a la base de datos: %v, en SUPABASE", err)
+		log.Fatalf("Error al establecer conexión con la base de datos en SUPABASE: %v", err)
 	}
 
 	DB = conn
