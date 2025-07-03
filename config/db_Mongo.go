@@ -40,6 +40,7 @@ func InitMongoDB() error {
 	return nil
 }
 
+
 func CloseMongo() {
 	if MongoClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
