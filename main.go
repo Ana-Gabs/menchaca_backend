@@ -1,35 +1,60 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
-	config "menchaca-backend/config"
-
+	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+
+	"menchaca-backend/config"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error cargando el archivo .env:", err)
+	// 1. Cargar variables de entorno
+	if err := godotenv.Load(); err != nil {
+		log.Println("No se pudo cargar el archivo .env")
 	}
 
+	// 2. Conectar a Postgres
 	config.InitDB()
 
-	err = config.InitMongoDB()
-	if err != nil {
+	// 3. Conectar a MongoDB
+	if err := config.InitMongoDB(); err != nil {
 		log.Fatalf("Error inicializando MongoDB: %v", err)
 	}
+	defer config.CloseMongo()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "¡Servidor funcionando con Postgres y MongoDB!")
+	// 4. Crear instancia de Fiber
+	app := fiber.New()
+
+	// 5. Ruta de prueba
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("¡Servidor funcionando con Fiber, Postgres y MongoDB! 🎉")
 	})
 
-	log.Println("Servidor iniciado en http://localhost:8080")
-	err = http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal(err)
+	// 6. Graceful shutdown
+	go gracefulShutdown(app)
+
+	
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
+
+	log.Printf("🚀 Servidor iniciado en http://localhost:%s\n", port)
+	if err := app.Listen(":" + port); err != nil {
+		log.Fatalf("Error al iniciar el servidor: %v", err)
+	}
+}
+
+func gracefulShutdown(app *fiber.App) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+	log.Println("🧹 Cerrando servidor y conexiones...")
+	config.CloseMongo()
+	_ = app.Shutdown()
 }

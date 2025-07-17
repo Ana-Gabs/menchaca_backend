@@ -9,88 +9,93 @@ import (
 
 	"menchaca-backend/models"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// LogCollection es la colección de MongoDB donde se guardan los logs
 var LogCollection *mongo.Collection
 
-func InitLogger(mongoClient *mongo.Client) {
-	LogCollection = mongoClient.Database("nombre_de_tu_db").Collection("logs")
+// InitLogger inicializa la colección de logs de MongoDB
+func InitLogger(client *mongo.Client) {
+	LogCollection = client.Database(os.Getenv("MONGO_DB")).Collection("logs")
 }
 
-func LogAction(c *gin.Context, email, action, logLevel string) {
-	start := time.Now()
+// LogAction registra una acción en MongoDB; debe usarse como middleware de Fiber
+func LogAction(action string, logLevel string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		start := time.Now()
 
-	c.Next()
+		// Ejecuta siguiente handler
+		err := c.Next()
 
-	duration := time.Since(start).Seconds() * 1000 // ms
+		duration := time.Since(start).Seconds() * 1000 // ms
 
-	statusCode := c.Writer.Status()
-	dynamicLevel := "info"
-	if statusCode >= 400 {
-		dynamicLevel = "error"
-	}
-
-	entry := models.LogEntry{
-		Email:        email,
-		Action:       action,
-		LogLevel:     ifEmpty(logLevel, dynamicLevel),
-		Timestamp:    time.Now(),
-		IP:           getIP(c),
-		UserAgent:    c.Request.UserAgent(),
-		Referer:      c.Request.Referer(),
-		Origin:       c.Request.Header.Get("Origin"),
-		Method:       c.Request.Method,
-		URL:          c.Request.RequestURI,
-		Status:       statusCode,
-		ResponseTime: duration,
-		Protocol:     c.Request.Proto,
-		Hostname:     getHostname(),
-		Environment:  getEnv("GO_ENV", "development"),
-		GoVersion:    runtime.Version(),
-		PID:          os.Getpid(),
-	}
-
-	go func() {
-		_, err := LogCollection.InsertOne(context.Background(), entry)
-		if err != nil {
-			// Aquí puedes usar logrus para registrar el error si deseas
-			// logs.Logger.Error("Error al guardar log: ", err)
+		statusCode := c.Response().StatusCode()
+		dynamicLevel := logLevel
+		if dynamicLevel == "" {
+			dynamicLevel = "info"
 		}
-	}()
-}
+		if statusCode >= 400 {
+			dynamicLevel = "error"
+		}
 
-// Funciones auxiliares
-func ifEmpty(val, fallback string) string {
-	if val == "" {
-		return fallback
+		entry := models.LogEntry{
+			Email:        c.Locals("userEmail").(string),
+			Action:       action,
+			LogLevel:     dynamicLevel,
+			Timestamp:    time.Now(),
+			IP:           getIP(c),
+			UserAgent:    c.Get("User-Agent"),
+			Referer:      c.Get("Referer"),
+			Origin:       c.Get("Origin"),
+			Method:       c.Method(),
+			URL:          string(c.Request().URI().Path()),
+			Status:       statusCode,
+			ResponseTime: duration,
+			Protocol:     c.Request().Protocol(),
+			Hostname:     getHostname(),
+			Environment:  getEnv("GO_ENV", "development"),
+			GoVersion:    runtime.Version(),
+			PID:          os.Getpid(),
+		}
+
+		// Inserta de forma asíncrona
+		go func() {
+			_, err := LogCollection.InsertOne(context.Background(), entry)
+			if err != nil {
+				// opcional: manejar error de logging
+			}
+		}()
+
+		return err
 	}
-	return val
 }
 
-func getIP(c *gin.Context) string {
-	ip := c.ClientIP()
-	// Opción adicional si estás detrás de un proxy
-	if forwarded := c.Request.Header.Get("X-Forwarded-For"); forwarded != "" {
+// getIP obtiene la IP del cliente
+func getIP(c *fiber.Ctx) string {
+	ip := c.IP()
+	if forwarded := c.Get("X-Forwarded-For"); forwarded != "" {
 		ips := strings.Split(forwarded, ",")
 		ip = strings.TrimSpace(ips[0])
 	}
 	return ip
 }
 
+// getHostname retorna el hostname del sistema
 func getHostname() string {
-	host, err := os.Hostname()
+	h, err := os.Hostname()
 	if err != nil {
 		return "unknown"
 	}
-	return host
+	return h
 }
 
+// getEnv obtiene variable de entorno con fallback
 func getEnv(key, fallback string) string {
-	val := os.Getenv(key)
-	if val == "" {
+	v := os.Getenv(key)
+	if v == "" {
 		return fallback
 	}
-	return val
+	return v
 }
